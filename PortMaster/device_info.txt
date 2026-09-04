@@ -49,10 +49,16 @@ fi
 CFW_NAME="Unknown"
 CFW_VERSION="Unknown"
 
+LOONG_VERSION_FILE="${PM_ROOT_PREFIX:-}/loong/loong_version"
 if [ "${ID:-}" = "loong" ]; then
     # MiniLoong LoongOS
     CFW_NAME="Loong"
     CFW_VERSION="${VERSION_ID:-Unknown}"
+elif [ -f "$LOONG_VERSION_FILE" ]; then
+    # Legacy MiniLoong LoongOS
+    CFW_NAME="Loong"
+    CFW_VERSION=$(grep -o '"verShow"[[:space:]]*:[[:space:]]*"[^"]*"' "$LOONG_VERSION_FILE" 2>/dev/null | cut -d'"' -f4)
+    [ -z "$CFW_VERSION" ] && CFW_VERSION="Unknown"
 elif [ -f "/usr/share/plymouth/themes/text.plymouth" ]; then
     CFW_INFO=$(grep "title=" "/usr/share/plymouth/themes/text.plymouth")
     CFW_FFS=$(grep -a "title=" "/usr/share/plymouth/themes/text.plymouth" | cut -d'=' -f 2- | tr -cd 'a-zA-Z' | tr '[:upper:]' '[:lower:]')

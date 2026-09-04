@@ -5,7 +5,13 @@
 
 export XDG_DATA_HOME=${XDG_DATA_HOME:-$HOME/.local/share}
 
-if [ -d "/opt/system/Tools/PortMaster/" ]; then
+PORTMASTER_LAUNCHER_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+if [ -f "$PORTMASTER_LAUNCHER_DIR/control.txt" ]; then
+  controlfolder="$PORTMASTER_LAUNCHER_DIR"
+elif [ -d "$PORTMASTER_LAUNCHER_DIR/PortMaster/" ]; then
+  controlfolder="$PORTMASTER_LAUNCHER_DIR/PortMaster"
+elif [ -d "/opt/system/Tools/PortMaster/" ]; then
   controlfolder="/opt/system/Tools/PortMaster"
 elif [ -d "/opt/tools/PortMaster/" ]; then
   controlfolder="/opt/tools/PortMaster"
@@ -15,7 +21,7 @@ else
   controlfolder="/roms/ports/PortMaster"
 fi
 
-source $controlfolder/control.txt
+source "$controlfolder/control.txt"
 
 [ -f "${controlfolder}/mod_${CFW_NAME}.txt" ] && source "${controlfolder}/mod_${CFW_NAME}.txt"
 

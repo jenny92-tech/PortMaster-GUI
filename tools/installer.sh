@@ -8,6 +8,11 @@ XDG_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
 NO_SUDO="N"
 ESUDO=""
 CUR_TTY=/dev/tty0
+LOONG_LEGACY="N"
+
+if [ -f "/etc/os-release" ]; then
+  source /etc/os-release
+fi
 
 # RetroDECK
 if [ -f "/app/bin/retrodeck.sh" ]; then
@@ -73,7 +78,18 @@ elif [ -f ~/.var/app/net.retrodeck.retrodeck/config/retrodeck/retrodeck.cfg ]; t
   touch "$HOME/no_es_restart"
 else
   # Fallback to non RetroDECK settings
-  if [ -d "/opt/system/Tools/" ]; then
+  if [ "${ID:-}" = "loong" ]; then
+    controlfolder="/roms/ports"
+    OS_NAME_OVERRIDE="Loong"
+    CUR_TTY=/dev/fd/1
+    touch "$HOME/no_es_restart"
+  elif [ -f "/loong/loong_version" ]; then
+    controlfolder="/mnt/sdcard/roms/ports"
+    OS_NAME_OVERRIDE="Loong"
+    CUR_TTY=/dev/fd/1
+    LOONG_LEGACY="Y"
+    touch "$HOME/no_es_restart"
+  elif [ -d "/opt/system/Tools/" ]; then
     controlfolder="/opt/system/Tools"
   elif [ -d "/mnt/mmc/MUOS" ]; then
     controlfolder="/mnt/mmc/MUOS"
@@ -89,7 +105,11 @@ else
     controlfolder="/roms/ports"
   fi
 
-  if [[ -e "/usr/share/plymouth/themes/text.plymouth" ]]; then
+  if [ "${ID:-}" = "loong" ]; then
+    directory="roms"
+  elif [ "$LOONG_LEGACY" = "Y" ]; then
+    directory="mnt/sdcard/roms"
+  elif [[ -e "/usr/share/plymouth/themes/text.plymouth" ]]; then
     if [ ! -z "$(cat /etc/fstab | grep roms2 | tr -d '\0')" ]; then
       directory="roms2"
     else
@@ -107,10 +127,6 @@ else
 fi
 
 TEMP_DIR=$(pwd)
-
-if [ -f "/etc/os-release" ]; then
-  source /etc/os-release
-fi
 
 if [ -n "$OS_NAME_OVERRIDE" ]; then
   OS_NAME="$OS_NAME_OVERRIDE"
@@ -180,8 +196,16 @@ fi
 $ESUDO unzip -o "$TEMP_DIR/PortMaster.zip" | tee -a $CUR_TTY
 
 # Overrides
-if [ ! -z "$OS_NAME" ]; then
-  PORTMASTER_DIR="$controlfolder/PortMaster"
+PORTMASTER_DIR="$controlfolder/PortMaster"
+if [ "$LOONG_LEGACY" = "Y" ]; then
+  MINILOONG_LAUNCHER="$PORTMASTER_DIR/miniloong/PortMaster.txt"
+  if [ ! -f "$MINILOONG_LAUNCHER" ]; then
+    echo "MiniLoong launcher is missing: $MINILOONG_LAUNCHER" | tee -a $CUR_TTY
+    exit 1
+  fi
+  $ESUDO cp -vf "$MINILOONG_LAUNCHER" "$controlfolder/PortMaster.sh" | tee -a $CUR_TTY
+  $ESUDO chmod +x "$controlfolder/PortMaster.sh"
+elif [ ! -z "$OS_NAME" ]; then
   OVERRIDE_DIR="$PORTMASTER_DIR/${OS_NAME,,}"
 
   echo "--> $OVERRIDE_DIR <--" | tee -a $CUR_TTY
@@ -191,7 +215,7 @@ if [ ! -z "$OS_NAME" ]; then
   fi
 fi
 
-if [ ! -z "$RELOCATE_PM" ]; then
+if [ "$LOONG_LEGACY" != "Y" ] && [ ! -z "$RELOCATE_PM" ]; then
   if [ -d "/userdata/roms/ports" ]; then
     $ESUDO mv -vf PortMaster/PortMaster.sh /$directory/ports/PortMaster.sh | tee -a $CUR_TTY
   else

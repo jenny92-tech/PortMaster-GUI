@@ -1241,9 +1241,10 @@ class PlatformTrimUI(PlatformBase):
 
 
 class PlatformLoong(PlatformBase):
-    """Keep the LoongOS frontend launcher beside installed port scripts."""
+    """Install the launcher required by the detected LoongOS layout."""
 
     WANT_XBOX_FIX = True
+    LEGACY_TOOLS_DIR = Path("/mnt/sdcard/roms/ports")
 
     def first_run(self):
         self.portmaster_install([])
@@ -1251,14 +1252,21 @@ class PlatformLoong(PlatformBase):
     def portmaster_install(self, bash_files):
         super().portmaster_install(bash_files)
 
-        source = self.hm.tools_dir / "PortMaster" / "PortMaster.sh"
         target = self.hm.scripts_dir / "PortMaster.sh"
+        if self.hm.tools_dir == self.LEGACY_TOOLS_DIR:
+            source = self.hm.tools_dir / "PortMaster" / "miniloong" / "PortMaster.txt"
+            operation = shutil.copy2
+        else:
+            source = self.hm.tools_dir / "PortMaster" / "PortMaster.sh"
+            operation = shutil.move
+
         if not source.is_file():
+            logger.error(f"Unable to install LoongOS launcher: {source} is missing")
             return
 
         try:
-            logger.debug(f'Move {source} -> {target}')
-            shutil.move(source, target)
+            logger.debug(f'Install {source} -> {target}')
+            operation(source, target)
         except OSError as err:
             logger.error(f"Unable to install LoongOS launcher: {err}")
             return

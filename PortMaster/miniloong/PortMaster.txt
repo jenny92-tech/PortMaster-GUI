@@ -1,0 +1,60 @@
+#!/bin/bash
+# SPDX-License-Identifier: MIT
+
+# Legacy LoongOS does not provide the Python environment required by PortMaster.
+# Mount the maintained runtime, then hand control to the normal core launcher.
+launcher_dir="$(cd "$(dirname "$0")" && pwd)"
+controlfolder="$launcher_dir/PortMaster"
+python_mount="/tmp/portmaster-python"
+
+[ -f "$controlfolder/libs/python_3.11.squashfs" ] || exit 1
+[ -x "$controlfolder/PortMaster.sh" ] || exit 1
+mkdir -p "$python_mount" || exit 1
+umount "$python_mount" >/dev/null 2>&1 || true
+mount -o loop,ro "$controlfolder/libs/python_3.11.squashfs" "$python_mount" || exit 1
+
+if [ -S /run/wayland-0 ]; then
+  export XDG_RUNTIME_DIR=/run
+  export WAYLAND_DISPLAY=wayland-0
+  export SDL_VIDEODRIVER=wayland
+fi
+
+export PYTHONHOME="$python_mount"
+export PATH="$python_mount/bin:$PATH"
+export LD_LIBRARY_PATH="$python_mount/libs:$python_mount/lib:${LD_LIBRARY_PATH:-}"
+export XDG_DATA_HOME="$launcher_dir"
+
+loong_lifecycle() {
+  "$python_mount/bin/python3" - "$1" <<'PY'
+import ctypes
+import sys
+
+sdk = ctypes.CDLL("/usr/lib/libloong_sdk.so")
+if sys.argv[1] == "open":
+    sdk.EventOpend.argtypes = [ctypes.c_char_p]
+    sdk.EventOpend.restype = ctypes.c_int
+    print(sdk.EventOpend(b"GAME"))
+else:
+    sdk.EventClosing.argtypes = [ctypes.c_char_p, ctypes.c_char_p]
+    sdk.EventClosing.restype = ctypes.c_int
+    print(sdk.EventClosing(b"GAME", b""))
+PY
+}
+
+lifecycle_opened=0
+if [ "$(loong_lifecycle open 2>/dev/null)" = "0" ]; then
+  lifecycle_opened=1
+fi
+
+cleanup() {
+  exit_status=$?
+  trap - EXIT INT TERM
+  if [ "$lifecycle_opened" -eq 1 ]; then
+    loong_lifecycle close >/dev/null 2>&1 || true
+  fi
+  umount "$python_mount" >/dev/null 2>&1 || true
+  exit "$exit_status"
+}
+trap cleanup EXIT INT TERM
+
+"$controlfolder/PortMaster.sh" "$@"

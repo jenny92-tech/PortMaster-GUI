@@ -29,7 +29,11 @@ if [ -f "/etc/os-release" ]; then
   source /etc/os-release
 fi
 
-if [ -d "/PortMaster/" ]; then
+CONTROL_TXT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if [ -f "$CONTROL_TXT_DIR/device_info.txt" ]; then
+  export controlfolder="$CONTROL_TXT_DIR"
+elif [ -d "/PortMaster/" ]; then
   export controlfolder="/PortMaster"
 elif [ -d "/opt/system/Tools/PortMaster/" ]; then
   export controlfolder="/opt/system/Tools/PortMaster"
@@ -171,8 +175,19 @@ get_controls() {
   sdl_controllerconfig="$(< "${SDL_GAMECONTROLLERCONFIG_FILE}")"
 }
 
-source $controlfolder/device_info.txt
-source $controlfolder/funcs.txt
+source "$controlfolder/device_info.txt"
+
+# Legacy LoongOS keeps its ROM tree below /mnt/sdcard. Current LoongOS uses
+# the standard /roms layout and takes precedence when both markers exist.
+if [[ "$CFW_NAME" == "Loong" ]]; then
+  if [[ "${ID:-}" == "loong" ]]; then
+    export directory="roms"
+  else
+    export directory="mnt/sdcard/roms"
+  fi
+fi
+
+source "$controlfolder/funcs.txt"
 
 if [ ! -z "$ESUDO" ]; then
   $ESUDO chmod 666 /dev/tty0

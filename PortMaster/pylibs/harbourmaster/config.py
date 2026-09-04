@@ -38,6 +38,31 @@ HM_DEFAULT_PORTS_DIR   = Path("/roms/ports")
 HM_DEFAULT_SCRIPTS_DIR = Path("/roms/ports")
 HM_DEFAULT_TOOLS_DIR   = Path("/roms/ports")
 
+
+def _rooted_path(path):
+    """Resolve absolute device paths below a synthetic root when testing."""
+    root_prefix = os.environ.get('PM_ROOT_PREFIX', '')
+    if root_prefix:
+        return Path(root_prefix) / str(path).lstrip('/')
+
+    return Path(path)
+
+
+def _os_release_value(key):
+    """Read one quoted or unquoted value from the target system's os-release."""
+    try:
+        content = _rooted_path("/etc/os-release").read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+
+    for line in content.splitlines():
+        name, separator, value = line.partition('=')
+        if separator and name == key:
+            return value.strip().strip('"\'')
+
+    return None
+
+
 if 'XDG_DATA_HOME' not in os.environ:
     os.environ['XDG_DATA_HOME'] = str(Path().home() / '.local' / 'share')
 
@@ -51,6 +76,18 @@ if (Path().cwd() / '.git').is_dir():
     HM_DEFAULT_SCRIPTS_DIR = Path('ports/').absolute()
     HM_TESTING=True
     
+elif _os_release_value('ID') == 'loong':
+    ## Current MiniLoong Pocket One / LoongOS
+    HM_DEFAULT_TOOLS_DIR   = _rooted_path("/roms/ports")
+    HM_DEFAULT_PORTS_DIR   = _rooted_path("/roms/ports")
+    HM_DEFAULT_SCRIPTS_DIR = _rooted_path("/roms/ports")
+
+elif _rooted_path("/loong/loong_version").is_file():
+    ## Legacy MiniLoong Pocket One / LoongOS
+    HM_DEFAULT_TOOLS_DIR   = _rooted_path("/mnt/sdcard/roms/ports")
+    HM_DEFAULT_PORTS_DIR   = _rooted_path("/mnt/sdcard/roms/ports")
+    HM_DEFAULT_SCRIPTS_DIR = _rooted_path("/mnt/sdcard/roms/ports")
+
 elif Path("/mnt/sdcard/spruce").is_dir():
     ## Spruce (Miyoo Flip)
     HM_DEFAULT_TOOLS_DIR   = Path("/mnt/SDCARD/Roms/.portmaster")

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import ast
 import contextlib
+import json
 import os
 import re
 import shutil
@@ -35,7 +36,7 @@ class NeverPresentPath:
         return False
 
 
-def load_new_device_info(os_release):
+def load_new_device_info(os_release, loong_version=""):
     tree = ast.parse(SOURCE.read_text(encoding="utf-8"), filename=str(SOURCE))
     function = next(
         node
@@ -47,11 +48,14 @@ def load_new_device_info(os_release):
     def safe_cat(path):
         if path == "/etc/os-release":
             return os_release
+        if path.endswith("/loong/loong_version"):
+            return loong_version
         return ""
 
     namespace = {
         "HM_TESTING": False,
         "Path": NeverPresentPath,
+        "json_safe_loads": json.loads,
         "logger": QuietLogger(),
         "nice_device_to_device": lambda _value: "default",
         "os": os,
@@ -132,7 +136,7 @@ def main():
             'VERSION_ID="1.4.0.27"',
         ]
     )
-    info = load_new_device_info(os_release)()
+    info = load_new_device_info(os_release, '{"verShow":"1.3.0.32"}')()
     assert info["name"] == "Loong"
     assert info["device"] == "miniloong"
     assert info["version"] == "1.4.0.27"

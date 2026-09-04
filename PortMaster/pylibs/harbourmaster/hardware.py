@@ -485,11 +485,21 @@ def new_device_info():
     os_release = safe_cat('/etc/os-release')
     loong_id_match = re.search(r'^ID=(?:"([^"]+)"|([^\s#]+))\s*$', os_release, re.I | re.M)
     loong_id = next((value for value in loong_id_match.groups() if value), '') if loong_id_match else ''
+    loong_version = safe_cat(f"{os.environ.get('PM_ROOT_PREFIX', '')}/loong/loong_version")
     if loong_id.casefold() == 'loong':
         version_match = re.search(r'^VERSION_ID=(?:"([^"]+)"|([^\s#]+))\s*$', os_release, re.I | re.M)
         info['name'] = 'Loong'
         info['version'] = next((value for value in version_match.groups() if value), 'Unknown') if version_match else 'Unknown'
         info['device'] = 'miniloong'
+
+    elif loong_version != '':
+        info['name'] = 'Loong'
+        info['version'] = 'Unknown'
+        info['device'] = 'miniloong'
+
+        loong_json = json_safe_loads(loong_version)
+        if isinstance(loong_json, dict):
+            info['version'] = loong_json.get('verShow', 'Unknown')
 
     # Works on ArkOS
     config_device = safe_cat('~/.config/.DEVICE')
