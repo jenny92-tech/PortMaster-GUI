@@ -25,12 +25,24 @@ source "$controlfolder/PortMasterDialog.txt"
 
 # Extract the latest NotoSans.tar.xz
 if [ -f "$controlfolder/pylibs/resources/NotoSans.tar.xz" ]; then
-    # TODO: make sure this works on all CFW.
-    $ESUDO tar -C "$controlfolder/pylibs/resources" -xf "$controlfolder/pylibs/resources/NotoSans.tar.xz"
+    PM_NOTO_ARCHIVE="$controlfolder/pylibs/resources/NotoSans.tar.xz"
+    PM_NOTO_EXTRACTED=0
+    if command -v xz >/dev/null 2>&1; then
+        (set -o pipefail; $ESUDO xz -dc "$PM_NOTO_ARCHIVE" | \
+            $ESUDO tar -C "$controlfolder/pylibs/resources" -xf -) && PM_NOTO_EXTRACTED=1
+    else
+        $ESUDO tar -C "$controlfolder/pylibs/resources" -xf "$PM_NOTO_ARCHIVE" && PM_NOTO_EXTRACTED=1
+    fi
 
-    if [ -f "$controlfolder/pylibs/resources/NotoSansJP-Regular.ttf" ]; then
+    for PM_NOTO_FONT in HK JP KR SC TC; do
+        [ "$PM_NOTO_EXTRACTED" = "1" ] && \
+            [ -s "$controlfolder/pylibs/resources/NotoSans${PM_NOTO_FONT}-Regular.ttf" ] || \
+            PM_NOTO_EXTRACTED=0
+    done
+    if [ "$PM_NOTO_EXTRACTED" = "1" ]; then
         $ESUDO rm -f "$controlfolder/pylibs/resources/NotoSans.tar.xz"
     fi
+    unset PM_NOTO_ARCHIVE PM_NOTO_EXTRACTED PM_NOTO_FONT
 fi
 
 if [ -f "$PM_RESOURCE_DIR/do_init" ]; then

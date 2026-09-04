@@ -1,0 +1,29 @@
+name: Build MiniLoong Package
+
+run-name: >-
+  ${{ inputs.mode == 'publish' && 'Build and publish MiniLoong package' ||
+      'Validate MiniLoong package' }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Choose whether to validate only or publish a GitHub release
+        required: true
+        type: choice
+        default: validate
+        options:
+          - validate
+          - publish
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Run maintained MiniLoong release pipeline
+    uses: ./.github/workflows/follow-official-stable.yaml
+    with:
+      validate_only: ${{ inputs.mode != 'publish' }}
+    permissions:
+      contents: write

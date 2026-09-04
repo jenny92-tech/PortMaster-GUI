@@ -11,6 +11,7 @@ PORTMASTER_RELEASE_CHANNEL = 'developer'
 PORTMASTER_MIN_VERSION = '2025-02-17-0000'
 PORTMASTER_RELEASE_URL = 'https://github.com/PortsMaster/PortMaster-GUI/releases/latest/download/'
 PORTMASTER_RELEASE_VALUES = ('stable', 'beta', 'alpha')
+PORTMASTER_MAINTAINER = "Jenny92"
 
 PORTMASTER_UPDATE_FREQUENCY = (60 * 60 * 1)
 __builtins__.PORTMASTER_DEBUG = False  ## This adds a lot of extra info
@@ -672,6 +673,11 @@ class PortMasterGUI(pySDL2gui.GUI, harbourmaster.Callback):
         self.dir_scanner.callback = self.dir_scanner_callback
 
         self.theme_data = self.themes.gui_init()
+        system_status = self.theme_data.get("main_menu", {}).get("system_time")
+        maintainer_label = f"Maintainer: {PORTMASTER_MAINTAINER}"
+        if isinstance(system_status, dict) and isinstance(system_status.get("text"), str):
+            if maintainer_label not in system_status["text"].splitlines():
+                system_status["text"] = f'{system_status["text"].rstrip()}\n{maintainer_label}'
         self.resources.add_path(PYLIB_PATH / 'resources')
         self.theme_downloader = None
 

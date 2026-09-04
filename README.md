@@ -1,5 +1,9 @@
 # PortMaster - GUI
 
+> This branch is the Jenny92 maintained build for MiniLoong. General PortMaster
+> documentation below remains upstream-owned. Fork scope, release assets and stable
+> update procedure are documented in [`release/README.md`](release/README.md).
+
 PortMaster is a convenient script designed to facilitate the downloading and installation of ports for handheld devices. As the number of available ports has increased, the original interface has become progressively cumbersome. For the past few months we have been developing a new GUI.
 
 # Features (it has them)

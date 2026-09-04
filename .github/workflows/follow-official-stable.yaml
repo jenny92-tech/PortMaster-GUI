@@ -1,0 +1,354 @@
+name: Follow official stable release
+
+run-name: >-
+  ${{ github.event_name == 'schedule' && 'Scheduled check and publish' ||
+      inputs.validate_only && 'Validate only' || 'Validate and publish' }}
+
+on:
+  schedule:
+    - cron: "19 3 * * 0"
+  workflow_dispatch:
+    inputs:
+      validate_only:
+        description: Validate only; do not push or publish
+        type: boolean
+        default: true
+  workflow_call:
+    inputs:
+      validate_only:
+        description: Validate only; do not push or publish
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: follow-official-stable
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    name: Plan · official stable
+    runs-on: ubuntu-latest
+    outputs:
+      decision: ${{ steps.plan.outputs.decision }}
+      reason: ${{ steps.plan.outputs.reason }}
+      stable: ${{ steps.plan.outputs.stable }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout publication source configuration
+        uses: actions/checkout@v5
+        with:
+          ref: miniloong-support
+          persist-credentials: false
+
+      - name: Resolve official stable version and release decision
+        id: plan
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          VALIDATE_ONLY: ${{ inputs.validate_only }}
+        run: |
+          set -euo pipefail
+          source release/portmaster-sources.sh
+          curl --fail --silent --show-error --location --retry 3 \
+            "$PORTMASTER_UPSTREAM_VERSION_URL" \
+            --output /tmp/official-version.json
+          stable=$(python3 - <<'PY'
+          import json
+          import re
+
+          data = json.load(open('/tmp/official-version.json', encoding='utf-8'))
+          value = data['stable']['version']
+          if not isinstance(value, str) or not re.fullmatch(r'20\d\d\.\d\d\.\d\d-\d{4}', value):
+              raise SystemExit('invalid official stable version')
+          print(value)
+          PY
+          )
+
+          decision=validate
+          reason="manual validation requested"
+          if gh release view "$stable" --repo "$GITHUB_REPOSITORY" \
+              --json isDraft,isPrerelease,targetCommitish,assets > /tmp/release.json 2>/dev/null; then
+            release_state=$(python3 - <<'PY'
+          import json
+
+          data = json.load(open('/tmp/release.json', encoding='utf-8'))
+          expected = {'PortMaster.zip', 'version.json', 'SHA256SUMS'}
+          names = {asset['name'] for asset in data.get('assets', [])}
+          if data['isPrerelease']:
+              raise SystemExit('same-version test release exists; refusing to replace it')
+          if not data['isDraft'] and not expected <= names:
+              raise SystemExit('same-version release exists but is incomplete; refusing to replace it')
+          print('draft' if data['isDraft'] else 'published')
+          PY
+            )
+            if [ "$release_state" = draft ]; then
+              decision=resume
+              reason="resume validated draft release $stable"
+            else
+              decision=noop
+              reason="release $stable is already complete"
+            fi
+          elif [ "$EVENT_NAME" = schedule ] || [ "$VALIDATE_ONLY" != true ]; then
+            decision=publish
+            reason="validated publication requested"
+          fi
+
+          echo "stable=$stable" >> "$GITHUB_OUTPUT"
+          echo "decision=$decision" >> "$GITHUB_OUTPUT"
+          echo "reason=$reason" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "## Release plan"
+            echo
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Official stable | \`$stable\` |"
+            echo "| Decision | **$decision** |"
+            echo "| Reason | $reason |"
+            echo "| Intermediate artifacts | None |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  validate:
+    name: Validate · ${{ needs.plan.outputs.stable }}
+    needs: plan
+    if: needs.plan.outputs.decision != 'noop'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      candidate_sha: ${{ steps.candidate.outputs.sha }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      STABLE: ${{ needs.plan.outputs.stable }}
+      DECISION: ${{ needs.plan.outputs.decision }}
+    steps:
+      - name: Checkout maintained MiniLoong branch
+        uses: actions/checkout@v5
+        with:
+          ref: miniloong-support
+          fetch-depth: 0
+
+      - name: Rebase maintained patch onto ${{ needs.plan.outputs.stable }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          source release/portmaster-sources.sh
+          git remote add upstream "$PORTMASTER_UPSTREAM_GIT_URL" 2>/dev/null || true
+          git fetch --force upstream "refs/tags/$STABLE:refs/upstream/stable/$STABLE"
+          previous=$(python3 -c 'import json; print(json.load(open("release/upstream-baseline.json"))["stable_tag"])')
+          git rev-parse -q --verify "refs/upstream/stable/$previous" >/dev/null || \
+            git fetch --force upstream "refs/tags/$previous:refs/upstream/stable/$previous"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rebase --onto "refs/upstream/stable/$STABLE" "refs/upstream/stable/$previous" miniloong-support
+          python3 - "$STABLE" <<'PY'
+          import json
+          import sys
+
+          path = 'release/upstream-baseline.json'
+          data = json.load(open(path, encoding='utf-8'))
+          data['stable_tag'] = sys.argv[1]
+          with open(path, 'w', encoding='utf-8') as handle:
+              json.dump(data, handle, indent=2)
+              handle.write('\n')
+          PY
+          git add release/upstream-baseline.json
+          git diff --cached --quiet || git commit --amend --no-edit
+          maintained_commits=$(git rev-list --count "refs/upstream/stable/$STABLE"..HEAD)
+          [ "$maintained_commits" -gt 0 ] || {
+            echo "no maintained commits remain after rebase" >&2
+            exit 68
+          }
+          echo "Rebased $maintained_commits maintained commits."
+
+      - name: Checkout consumer contract tests
+        uses: actions/checkout@v5
+        with:
+          repository: jenny92-tech/portmaster-launcher-pack
+          ref: main
+          path: _consumer/portmaster-launcher-pack
+          persist-credentials: false
+
+      - name: Validate and build ${{ needs.plan.outputs.stable }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          PORTMASTER_OFFICIAL_STABLE_REF="refs/upstream/stable/$STABLE" \
+            PORTMASTER_CONSUMER_ROOT="$GITHUB_WORKSPACE/_consumer/portmaster-launcher-pack" \
+            tools/validate-maintained-candidate.sh "$STABLE" "$RUNNER_TEMP/maintained-release"
+
+      - name: Record validated candidate
+        id: candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha=$(git rev-parse HEAD)
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          {
+            echo "## Validated candidate"
+            echo
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Version | \`$STABLE\` |"
+            echo "| Candidate | \`$sha\` |"
+            echo "| Mode | **$DECISION** |"
+            echo "| Package size | $(du -h "$RUNNER_TEMP/maintained-release/PortMaster.zip" | awk '{print $1}') |"
+            echo "| Stored Actions artifacts | None |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Push validated ${{ needs.plan.outputs.stable }} candidate
+        if: needs.plan.outputs.decision == 'publish'
+        run: git push --force-with-lease origin HEAD:miniloong-support
+
+  publish:
+    name: Publish · ${{ needs.plan.outputs.stable }}
+    needs: [plan, validate]
+    if: needs.plan.outputs.decision == 'publish' || needs.plan.outputs.decision == 'resume'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      STABLE: ${{ needs.plan.outputs.stable }}
+      CANDIDATE_SHA: ${{ needs.validate.outputs.candidate_sha }}
+      DECISION: ${{ needs.plan.outputs.decision }}
+    steps:
+      - name: Checkout validated candidate ${{ needs.validate.outputs.candidate_sha }}
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.validate.outputs.candidate_sha }}
+          fetch-depth: 0
+
+      - name: Verify published branch candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          source release/portmaster-sources.sh
+          git fetch origin refs/heads/miniloong-support
+          [ "$(git rev-parse FETCH_HEAD)" = "$CANDIDATE_SHA" ] || {
+            echo "miniloong-support no longer points to validated candidate $CANDIDATE_SHA" >&2
+            exit 69
+          }
+          git remote add upstream "$PORTMASTER_UPSTREAM_GIT_URL" 2>/dev/null || true
+          git fetch --force upstream "refs/tags/$STABLE:refs/upstream/stable/$STABLE"
+          if [ "$DECISION" = resume ]; then
+            gh release view "$STABLE" --repo "$GITHUB_REPOSITORY" \
+              --json isDraft,isPrerelease,targetCommitish > /tmp/resume-release.json
+            python3 - "$CANDIDATE_SHA" <<'PY'
+          import json
+          import sys
+
+          data = json.load(open('/tmp/resume-release.json', encoding='utf-8'))
+          if not data['isDraft'] or data['isPrerelease']:
+              raise SystemExit('release is no longer a resumable draft')
+          if data['targetCommitish'] != sys.argv[1]:
+              raise SystemExit('draft target does not match the validated candidate')
+          PY
+          elif gh release view "$STABLE" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "release $STABLE appeared after planning; refusing to replace it" >&2
+            exit 70
+          fi
+
+      - name: Checkout consumer contract tests
+        uses: actions/checkout@v5
+        with:
+          repository: jenny92-tech/portmaster-launcher-pack
+          ref: main
+          path: _consumer/portmaster-launcher-pack
+          persist-credentials: false
+
+      - name: Rebuild and revalidate ${{ needs.plan.outputs.stable }} for publication
+        shell: bash
+        run: |
+          set -euo pipefail
+          PORTMASTER_OFFICIAL_STABLE_REF="refs/upstream/stable/$STABLE" \
+            PORTMASTER_CONSUMER_ROOT="$GITHUB_WORKSPACE/_consumer/portmaster-launcher-pack" \
+            tools/validate-maintained-candidate.sh "$STABLE" "$RUNNER_TEMP/maintained-release"
+
+      - name: Publish verified release ${{ needs.plan.outputs.stable }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          assets="$RUNNER_TEMP/maintained-release"
+          if [ "$DECISION" = publish ]; then
+            gh release create "$STABLE" --repo "$GITHUB_REPOSITORY" --target "$CANDIDATE_SHA" \
+              --title "$STABLE" --notes "PortMaster stable $STABLE with maintained MiniLoong support." \
+              --draft
+          fi
+          upload_asset() {
+            local file=$1 attempt
+            for attempt in 1 2 3; do
+              if gh release upload "$STABLE" "$file" --repo "$GITHUB_REPOSITORY" --clobber; then
+                return 0
+              fi
+              [ "$attempt" = 3 ] || sleep $((attempt * 5))
+            done
+            return 1
+          }
+          for name in PortMaster.zip version.json SHA256SUMS; do
+            upload_asset "$assets/$name"
+          done
+          gh release view "$STABLE" --repo "$GITHUB_REPOSITORY" --json assets > /tmp/published-assets.json
+          python3 - "$assets" <<'PY'
+          import hashlib
+          import json
+          import pathlib
+          import sys
+
+          root = pathlib.Path(sys.argv[1])
+          expected = {'PortMaster.zip', 'version.json', 'SHA256SUMS'}
+          rows = json.load(open('/tmp/published-assets.json', encoding='utf-8'))['assets']
+          assets = {row['name']: row for row in rows}
+          if set(assets) != expected:
+              raise SystemExit(f"release assets differ: {sorted(assets)}")
+          for name in sorted(expected):
+              digest = 'sha256:' + hashlib.sha256((root / name).read_bytes()).hexdigest()
+              if assets[name].get('digest') != digest:
+                  raise SystemExit(f"release asset digest mismatch: {name}")
+          PY
+          gh release edit "$STABLE" --repo "$GITHUB_REPOSITORY" --draft=false
+          {
+            echo "## Published release"
+            echo
+            echo "Published **$STABLE** from validated candidate \`$CANDIDATE_SHA\`."
+            echo
+            echo "Release assets: \`PortMaster.zip\`, \`version.json\`, \`SHA256SUMS\`."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  summary:
+    name: Summary · ${{ needs.plan.outputs.stable || 'unresolved' }}
+    needs: [plan, validate, publish]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Report semantic workflow result
+        env:
+          VERSION: ${{ needs.plan.outputs.stable }}
+          DECISION: ${{ needs.plan.outputs.decision }}
+          REASON: ${{ needs.plan.outputs.reason }}
+          PLAN_RESULT: ${{ needs.plan.result }}
+          VALIDATE_RESULT: ${{ needs.validate.result }}
+          PUBLISH_RESULT: ${{ needs.publish.result }}
+          CANDIDATE_SHA: ${{ needs.validate.outputs.candidate_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "## Stable follower result"
+            echo
+            echo "| Stage | Result |"
+            echo "| --- | --- |"
+            echo "| Version | \`${VERSION:-unresolved}\` |"
+            echo "| Decision | **${DECISION:-unknown}** |"
+            echo "| Plan | $PLAN_RESULT |"
+            echo "| Validate | $VALIDATE_RESULT |"
+            echo "| Publish | $PUBLISH_RESULT |"
+            echo "| Candidate | \`${CANDIDATE_SHA:-none}\` |"
+            echo "| Reason | ${REASON:-not available} |"
+            echo "| Intermediate artifact storage | **0 bytes** |"
+          } >> "$GITHUB_STEP_SUMMARY"
