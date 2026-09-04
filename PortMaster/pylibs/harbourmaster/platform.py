@@ -1240,6 +1240,33 @@ class PlatformTrimUI(PlatformBase):
                         shutil.copy(image_file, target_file)
 
 
+class PlatformLoong(PlatformBase):
+    """Keep the LoongOS frontend launcher beside installed port scripts."""
+
+    WANT_XBOX_FIX = True
+
+    def first_run(self):
+        self.portmaster_install([])
+
+    def portmaster_install(self, bash_files):
+        super().portmaster_install(bash_files)
+
+        source = self.hm.tools_dir / "PortMaster" / "PortMaster.sh"
+        target = self.hm.scripts_dir / "PortMaster.sh"
+        if not source.is_file():
+            return
+
+        try:
+            logger.debug(f'Move {source} -> {target}')
+            shutil.move(source, target)
+        except OSError as err:
+            logger.error(f"Unable to install LoongOS launcher: {err}")
+            return
+
+        if target not in bash_files:
+            bash_files.append(target)
+
+
 class PlatformMiyoo(PlatformBase):
     WANT_XBOX_FIX = True
 
@@ -1296,6 +1323,7 @@ HM_PLATFORMS = {
     'muos':      PlatformmuOS,
     'miyoo':     PlatformMiyoo,
     'trimui':    PlatformTrimUI,
+    'loong':     PlatformLoong,
     'retrodeck': PlatformRetroDECK,
     'darwin':    PlatformTesting,
     'default':   PlatformBase,
@@ -1307,4 +1335,3 @@ __all__ = (
     'PlatformBase',
     'HM_PLATFORMS',
     )
-

@@ -93,6 +93,10 @@ get_controls() {
       ANALOGSTICKS="1"
       LOWRES="N"
     fi
+  elif [[ -e "/dev/input/by-path/platform-loong1_joypad-event-joystick" ]]; then
+    DEVICE="1900fe3c039900001399000002010000"
+    param_device="miniloong"
+    ANALOGSTICKS=1
   elif [[ -e "/dev/input/by-path/platform-odroidgo2-joypad-event-joystick" ]]; then
     if [[ ! -z $(cat /etc/emulationstation/es_input.cfg | grep "190000004b4800000010000001010000") ]]; then
       DEVICE="190000004b4800000010000001010000"

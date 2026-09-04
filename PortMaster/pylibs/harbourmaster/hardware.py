@@ -72,6 +72,9 @@ DEVICES = {
     "TrimUI Smart Pro": {"device": "trimui-smart-pro", "manufacturer": "TrimUI", "cfw": ["TrimUI", "KNULLI"]},
     "TrimUI Brick":     {"device": "trimui-brick",     "manufacturer": "TrimUI", "cfw": ["TrimUI", "KNULLI"]},
 
+    # MiniLoong
+    "MiniLoong Pocket One": {"device": "miniloong", "manufacturer": "MiniLoong", "cfw": ["Loong"]},
+
     # Retroid Pocket
     "Retroid Pocket 5":      {"device": "rp5",     "manufacturer": "Retroid Pocket", "cfw": ["ROCKNIX", "Batocera"]},
     "Retroid Pocket Mini":   {"device": "rpmini",  "manufacturer": "Retroid Pocket", "cfw": ["ROCKNIX", "Batocera"]},
@@ -171,6 +174,9 @@ HW_INFO = {
     # TrimUI
     "trimui-smart-pro": {"resolution": (1280, 720), "analogsticks": 2, "cpu": "a133plus", "capabilities": ["power"], "ram": 1024},
     "trimui-brick":     {"resolution": (1024, 768), "analogsticks": 0, "cpu": "a133plus", "capabilities": ["power"], "ram": 1024},
+
+    # MiniLoong
+    "miniloong": {"resolution": ( 960,  720), "analogsticks": 1, "cpu": "rk3566", "capabilities": ["power"], "ram": 1024},
 
     # ZPG GKD
     "gkd-bubble": {"resolution": (640, 480), "analogsticks": 2, "cpu": "rk3566",  "capabilities": ["power"], "ram": 1024},
@@ -475,6 +481,16 @@ def new_device_info():
         info['name'] = 'TrimUI'
         info['version'] = safe_cat("/etc/version")
 
+    # Works on MiniLoong LoongOS
+    os_release = safe_cat('/etc/os-release')
+    loong_id_match = re.search(r'^ID=(?:"([^"]+)"|([^\s#]+))\s*$', os_release, re.I | re.M)
+    loong_id = next((value for value in loong_id_match.groups() if value), '') if loong_id_match else ''
+    if loong_id.casefold() == 'loong':
+        version_match = re.search(r'^VERSION_ID=(?:"([^"]+)"|([^\s#]+))\s*$', os_release, re.I | re.M)
+        info['name'] = 'Loong'
+        info['version'] = next((value for value in version_match.groups() if value), 'Unknown') if version_match else 'Unknown'
+        info['device'] = 'miniloong'
+
     # Works on ArkOS
     config_device = safe_cat('~/.config/.DEVICE')
     if config_device != '':
@@ -506,7 +522,6 @@ def new_device_info():
         info['device'] = stcd
 
     # Works on AmberELEC / uOS / JELOS / ROCKNIX
-    os_release = safe_cat('/etc/os-release')
     for result in re.findall(r'^([a-z0-9_]+)="([^"]+)"$', os_release, re.I | re.M):
         if result[0] in ('NAME', 'VERSION', 'OS_NAME', 'OS_VERSION', 'HW_DEVICE', 'COREELEC_DEVICE'):
             key = result[0].rsplit('_', 1)[-1].lower()

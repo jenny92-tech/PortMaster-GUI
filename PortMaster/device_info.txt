@@ -49,7 +49,11 @@ fi
 CFW_NAME="Unknown"
 CFW_VERSION="Unknown"
 
-if [ -f "/usr/share/plymouth/themes/text.plymouth" ]; then
+if [ "${ID:-}" = "loong" ]; then
+    # MiniLoong LoongOS
+    CFW_NAME="Loong"
+    CFW_VERSION="${VERSION_ID:-Unknown}"
+elif [ -f "/usr/share/plymouth/themes/text.plymouth" ]; then
     CFW_INFO=$(grep "title=" "/usr/share/plymouth/themes/text.plymouth")
     CFW_FFS=$(grep -a "title=" "/usr/share/plymouth/themes/text.plymouth" | cut -d'=' -f 2- | tr -cd 'a-zA-Z' | tr '[:upper:]' '[:lower:]')
 
@@ -135,6 +139,8 @@ if [[ "$CFW_NAME" == "EmuELEC" ]]; then
     DEVICE_NAME=$(grep -a '^COREELEC_DEVICE=".*"' /etc/os-release | cut -d'"' -f 2)
 elif [[ "$CFW_NAME" == "TrimUI" ]]; then
     DEVICE_NAME="TrimUI Smart Pro"
+elif [[ "$CFW_NAME" == "Loong" ]]; then
+    DEVICE_NAME="MiniLoong Pocket One"
 elif [ -f "$HOME/.config/.CUSTOM_DEVICE" ]; then
     DEVICE_NAME=$(cat "$HOME/.config/.CUSTOM_DEVICE")
 elif [ -f "$HOME/.config/.DEVICE" ]; then
@@ -271,6 +277,11 @@ DISPLAY_ORIENTATION=0
 ## FIXES
 # Here is where we can add custome rules to fill out extra info on the device.
 case "$(echo "$DEVICE_NAME" | tr '[:upper:]' '[:lower:]')" in
+    "miniloong pocket one")
+        DEVICE_CPU="RK3566"
+        ANALOG_STICKS=1
+        ;;
+
     # by cpu
     "rk3399")
         DEVICE_NAME="RG552"

@@ -76,7 +76,7 @@ if [ -n "$AUTOINSTALL_FILES" ]; then
   for autoinstall_dir in "$AUTOINSTALL_DIR_1" "$AUTOINSTALL_DIR_2"; do
     if [ -f "$autoinstall_dir/runtimes.zip" ]; then
       # Old runtimes.zip do not include an architecture comment.
-      ZIP_COMMENT="$(unzip -z "$file_name" | tail -n1 | cut -d' ' -f1)"
+      ZIP_COMMENT="$(unzip -z "$autoinstall_dir/runtimes.zip" | tail -n1 | cut -d' ' -f1)"
       if [ "$ZIP_COMMENT" = "${DEVICE_ARCH}" ] || [ "$ZIP_COMMENT" = "Archive:" ]; then
         PortMasterDialog "message" "- Installing runtimes.zip."
         $ESUDO unzip -o "$autoinstall_dir/runtimes.zip" -d "$controlfolder/libs" | while IFS= read -r line; do
