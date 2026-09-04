@@ -189,12 +189,15 @@ def main():
     control = (ROOT / "PortMaster/control.txt").read_text(encoding="utf-8")
     controller_db = (ROOT / "PortMaster/gamecontrollerdb.txt").read_text(encoding="utf-8")
     assert "platform-loong1_joypad-event-joystick" in control
-    assert "1900fe3c039900001399000002010000,Loong Gamepad" in controller_db
+    assert (
+        "1900fe3c039900001399000002010000,Loong Gamepad,a:b1,b:b0"
+        in controller_db
+    )
 
     platform_base, platform_loong = load_platform_classes()
     assert issubclass(platform_loong, platform_base)
     assert platform_registry_entry()["loong"] == "PlatformLoong"
-    assert platform_loong.WANT_XBOX_FIX is True
+    assert platform_loong.WANT_XBOX_FIX is False
 
     with tempfile.TemporaryDirectory() as temporary_root:
         scripts_dir = Path(temporary_root) / "ports"

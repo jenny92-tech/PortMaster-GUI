@@ -1243,7 +1243,7 @@ class PlatformTrimUI(PlatformBase):
 class PlatformLoong(PlatformBase):
     """Install the launcher required by the detected LoongOS layout."""
 
-    WANT_XBOX_FIX = True
+    WANT_XBOX_FIX = False
     LEGACY_TOOLS_DIR = Path("/mnt/sdcard/roms/ports")
 
     def first_run(self):
