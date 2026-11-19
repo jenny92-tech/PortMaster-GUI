@@ -172,6 +172,31 @@ def test_name_and_version_from_os_release(shell, os_release, expected, tmp_path)
     assert run_fragment(command, script + '\necho "$CFW_NAME|$CFW_VERSION"\n', tmp_path) == expected
 
 
+MINILOONG_BOARD = "Rockchip RK3566 RK817 MINILOONG LP4X Board"
+
+
+@pytest.mark.parametrize("shell", SHELLS, ids=["bash", "busybox"])
+@pytest.mark.parametrize("cfw, model, expected", [
+    ("Loong", MINILOONG_BOARD, "MiniLoong Pocket 1"),
+    ("ROCKNIX", MINILOONG_BOARD, MINILOONG_BOARD),
+    ("Loong", "Other RK3566 board", "Other RK3566 board"),
+    ])
+def test_miniloong_model_on_loongos(shell, cfw, model, expected, tmp_path):
+    command = shell_or_skip(shell)
+    (tmp_path / "etc").mkdir()
+    (tmp_path / "etc" / "os-release").write_text(f'OS_NAME="{cfw}"\n')
+    device_tree = tmp_path / "proc" / "device-tree"
+    device_tree.mkdir(parents=True)
+    (device_tree / "model").write_bytes(model.encode() + b"\0")
+
+    text = (PM_DIR / "device_info.txt").read_text()
+    block = text[text.index('export CFW_NAME="Unknown"'):text.index("## The alphabet spelled out")]
+    block = re.sub(r'(?<=[\s"])/(etc|usr|boot|userdata|opt|var|mnt|app|storage|sys|proc)/',
+                   lambda m: f"{tmp_path}/{m.group(1)}/", block)
+    script = f'HOME="{tmp_path}"\n{block}\necho "$CFW_NAME|$DEVICE_NAME"\n'
+    assert run_fragment(command, script, tmp_path) == f"{cfw}|{expected}"
+
+
 @pytest.mark.parametrize("width, height", [
     (640, 480), (1280, 720), (720, 720), (480, 320), (1280, 800), (720, 480), (1240, 1080), (1080, 1240),
     (1024, 768), (1920, 1152), (320, 240), (854, 480)])
@@ -198,7 +223,7 @@ def test_screen_capabilities_shell_and_theme_server_agree(width, height):
 ## while its DEVICE_INFO_VERSION matches (device_info.txt's fast path and hardware.py both reuse
 ## it), so a change without a new version never reaches a device that ran the old one: 0.2.6's
 ## new screen rules didn't, and the Retroid Pocket Classic stayed "wide".
-DEVICE_INFO_HASH = ("0.2.8", "d9262aeab60d98c3")
+DEVICE_INFO_HASH = ("0.2.9", "5b99481362e3707d")
 
 
 def test_device_info_changes_come_with_a_new_version():
