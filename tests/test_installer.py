@@ -105,6 +105,12 @@ def fs_opt_tools(root):
     make(root, "/opt/tools/PortMaster", "/roms/ports")
 
 
+def fs_loong(root):
+    link(root, "/roms/ports", "/mnt/sdcard/roms/ports")
+    write(root, "/etc/os-release", 'ID=loong\nOS_NAME="Loong"\n')
+    write_exe(root / "sbin/reboot", 'echo reboot >> "$FAKE_CALLS"\n')
+
+
 def fs_rocknix(root):
     make(root, "/storage/roms/ports")
     link(root, "/roms", "/storage/roms")
@@ -134,6 +140,7 @@ CFWS = {
     'arkos_one_card':    fs_arkos_one_card,
     'opt_tools':         fs_opt_tools,
     'rocknix':           fs_rocknix,
+    'loong':             fs_loong,
     'retrodeck':         fs_retrodeck,
     'retrodeck_outside': fs_retrodeck_outside,
     }
@@ -457,6 +464,15 @@ def test_batocera_patched_generator_left_alone(tmp_path, portmaster_zip):
 
     assert generator.read_text() == "# already ours, gamecontrollerdb.txt\n"
     assert not generator.with_name("shGenerator.py.bak").exists()
+
+
+def test_loong(tmp_path, portmaster_zip):
+    installer = Installer(tmp_path, "loong")
+    put_zip(installer, portmaster_zip)
+    installer.run()
+
+    assert installer.path("/mnt/sdcard/roms/ports/PortMaster.sh").read_text() == stub()
+    assert installer.calls() == ["reboot"]
 
 
 def test_rocknix(tmp_path, portmaster_zip):

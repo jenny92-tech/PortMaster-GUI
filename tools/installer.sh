@@ -339,6 +339,10 @@ elif [ "$OS_NAME" = "ROCKNIX" ]; then
 
   shutdown -r now
 
+elif [ "${ID:-}" = "loong" ]; then
+  # LoongOS rescans the SD card for new Ports launchers during boot.
+  $ESUDO "$R/sbin/reboot"
+
 elif [[ "$ES_NAME" == "batocera-es-swissknife" ]]; then
   ## Broken
   # batocera-es-swissknife --restart
